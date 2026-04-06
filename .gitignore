@@ -1,0 +1,39 @@
+# Log files
+*.log
+nohup.out
+
+# Database files
+metastore_db/
+derby.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Hadoop/Hive temp files
+hive_staging/
+*.jar
+hadoop_tmp/
+
+# Local test files
+test_output/
+*.tmp
