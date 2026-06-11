@@ -9,7 +9,7 @@
 -- Load raw logs from HDFS in Apache/Nginx Common Log Format
 -- Format: IP - [timestamp] "REQUEST" status size
 -- Use regex to extract fields from the log line
-raw_data = LOAD 'hdfs://localhost:9000/user/root/clickstream/raw/' AS (line:chararray);
+raw_data = LOAD '/user/root/clickstream/raw/' AS (line:chararray);
 
 -- Parse using regex_extract to safely extract fields
 -- Pattern: ^(\S+) - \[(.*?)\] "(\S+ \S+ \S+)" (\d+) (\d+)
@@ -39,7 +39,7 @@ final_data = FOREACH cleaned_logs GENERATE
     request as url;
 
 -- Store processed data back to HDFS as CSV for Hive consumption
-STORE final_data INTO 'hdfs://localhost:9000/user/root/clickstream/processed/' USING PigStorage(',');
+STORE final_data INTO '/user/root/clickstream/processed/' USING PigStorage(',');
 
 -- Alternative: For debugging during development
 -- DUMP final_data;

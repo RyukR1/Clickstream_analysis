@@ -1,490 +1,359 @@
 # Website Clickstream Trend Analysis 📊
 
-> A complete big data pipeline demonstrating ETL (Extract-Transform-Load) and analytics using Apache Flume, Pig, and Hive. Processes website clickstream data to identify user behavior trends and patterns—similar to how Amazon, Netflix, and Facebook analyze user interactions.
+> A complete big data pipeline that ingests, cleans, and analyzes website clickstream logs using Apache Pig and Hive — all running inside Docker with a pre-built Hadoop ecosystem.
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python 3.7+](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-brightblue.svg)](https://www.docker.com/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![Docker Hub](https://img.shields.io/docker/pulls/ryukr1/clickstream-pipeline?label=Docker%20Hub)](https://hub.docker.com/r/ryukr1/clickstream-pipeline)
+[![Hadoop](https://img.shields.io/badge/Hadoop-3.3.6-yellow.svg)](https://hadoop.apache.org/)
+[![Hive](https://img.shields.io/badge/Hive-3.1.3-orange.svg)](https://hive.apache.org/)
+[![Pig](https://img.shields.io/badge/Pig-0.17.0-pink.svg)](https://pig.apache.org/)
 
 ---
 
 ## 🎯 What This Project Does
 
-This is a **production-inspired big data pipeline** that:
-
-1. **Ingests** clickstream data in real-time (Apache Flume)
-2. **Cleans** messy raw logs, removing errors and static assets (Apache Pig)
-3. **Analyzes** clean data using SQL queries to find trends (Apache Hive)
-
-**Key Achievement**: Processes 100 raw logs → filters to 89 quality records → generates 8 analytics insights
+This pipeline processes raw Apache web server logs through 3 phases:
 
 ```
-Raw Logs (100) ──Flume──> HDFS Raw ──Pig──> Cleaned Data (89) ──Hive──> Analytics Results
-  8,012 bytes                        MapReduce        5,809 bytes           8 Queries
+Raw Logs (100,000 entries)
+  ──[Pig ETL]──▶ Cleaned Data (~79,000 records, 404s & assets removed)
+  ──[Hive SQL]──▶ 8 Analytics Reports (top pages, trends, visitors)
 ```
+
+**Result**: Saves query results to `results/analysis_results.txt` — readable from VS Code or terminal.
 
 ---
 
-## 🚀 Quick Start (5 Minutes with Docker)
+## 🏗️ Architecture
 
-### Prerequisites
-- Docker installed (`silicoflare/hadoop:amd` image pre-pulled)
-- 4GB+ RAM available
-- Linux/Mac terminal
-
-### Step 1: Start Docker Container
-```bash
-# Clone this repo
-git clone <your-repo-url>
-cd "ClickSteam analysis"
-
-# Start Docker container with all services
-sudo docker run -d --name clickstream \
-  -p 9870:9870 \
-  -p 8088:8088 \
-  -p 9864:9864 \
-  -v "$(pwd):/clickstream" \
-  --entrypoint /bin/bash \
-  silicoflare/hadoop:amd \
-  -c "sleep infinity"
-
-# Enter container
-docker exec -it clickstream /bin/bash
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Docker Container (namenode)                 │
+│                                                             │
+│  Python Script ──▶ HDFS /raw/ ──▶ Apache Pig ──▶ HDFS /processed/
+│  (generates logs)                  (ETL clean)              │
+│                                        │                    │
+│                                   Apache Hive               │
+│                                   (8 SQL queries)           │
+│                                        │                    │
+│                              results/analysis_results.txt   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Step 2: Start Hadoop Services
-```bash
-# Inside the container, start services
-/usr/local/hadoop/bin/hdfs namenode -format -force
-/usr/local/hadoop/bin/hdfs namenode &
-/usr/local/hadoop/bin/hdfs datanode &
-/usr/local/hadoop/bin/yarn resourcemanager &
-/usr/local/hadoop/bin/yarn nodemanager &
+### Tech Stack
 
-# Verify services running
-jps
-# Should show: NameNode, DataNode, ResourceManager, NodeManager
-```
-
-### Step 3: Setup Pipeline
-```bash
-# Create HDFS directories
-hdfs dfs -mkdir -p /user/root/clickstream/{raw,processed}
-
-# Generate sample logs (100 entries)
-python3 << 'EOF'
-import random
-from datetime import datetime, timedelta
-
-pages = ['/index.html', '/products/laptop', '/products/phone', '/cart', '/checkout']
-ips = ['192.168.1.100', '192.168.1.101', '192.168.1.102', '10.0.0.1']
-
-with open('/clickstream/logs/access.log', 'w') as f:
-    current_time = datetime(2026, 4, 5, 16, 31, 52)
-    for i in range(100):
-        ip = random.choice(ips)
-        page = random.choice(pages)
-        status = random.choices([200, 404], weights=[90, 10])[0]
-        size = random.randint(1000, 10000)
-        timestamp = current_time.strftime('%d/%b/%Y:%H:%M:%S +0000')
-        log = f'{ip} - - [{timestamp}] "GET {page} HTTP/1.1" {status} {size}\n'
-        f.write(log)
-        current_time += timedelta(seconds=random.randint(1, 10))
-
-print("Generated 100 sample logs")
-EOF
-
-# Upload to HDFS
-hdfs dfs -put /clickstream/logs/access.log /user/root/clickstream/raw/
-```
-
-### Step 4: Run Data Pipeline
-
-**Phase 1 & 2: Ingestion & Cleaning (Pig)**
-```bash
-# Delete old output
-hdfs dfs -rm -r /user/root/clickstream/processed
-
-# Run Pig script (ETL/cleaning)
-pig -x local /clickstream/phase2_cleaning/clean_logs.pig
-# Result: 89 clean records (11 404s filtered)
-```
-
-**Phase 3: Start Hive MetaStore**
-```bash
-# Start MetaStore service
-nohup hive --service metastore > /tmp/metastore.log 2>&1 &
-
-# Wait 5 seconds for startup
-sleep 5
-```
-
-**Create Table & Run Analytics**
-```bash
-# Run Hive queries
-hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
-     -f /clickstream/phase3_analysis/create_table.hql
-
-hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
-     -f /clickstream/phase3_analysis/trend_queries.hql
-```
+| Phase | Tool | Role |
+|-------|------|------|
+| Storage | Hadoop HDFS | Distributed filesystem for logs |
+| Compute | Apache YARN | Job scheduler for MapReduce |
+| ETL | Apache Pig | Cleans raw logs via MapReduce |
+| Analytics | Apache Hive | SQL queries on clean data |
+| Deployment | Docker | Self-contained environment |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-clickstream-analysis/
+Clickstream_analysis/
 │
-├── README.md                          ← You are here
-├── DOCKER_QUICKSTART.md               ← Detailed Docker setup
-├── ARCHITECTURE.md                    ← System design & diagrams
-├── INTERVIEW_GUIDE.md                 ← Interview preparation
+├── Dockerfile                    ← Builds Hadoop+Hive+Pig image
+├── docker-compose.yml            ← Multi-node cluster (3 DataNodes)
+│
+├── start_docker.sh               ← ⭐ START HERE  (single-node, recommended)
+├── start_services.sh             ← Run INSIDE container to start Hadoop+Hive
+├── run_pipeline.sh               ← Run INSIDE container to execute pipeline
+├── start_multinode.sh            ← Optional: 3-node cluster via docker-compose
+│
+├── hadoop_config/
+│   ├── core-site.xml             ← HDFS default URI (namenode:9000)
+│   ├── hdfs-site.xml             ← Replication=1 (single node)
+│   ├── hdfs-site-multinode.xml   ← Replication=3 (multi node)
+│   └── yarn-site.xml             ← ResourceManager config
 │
 ├── phase1_ingestion/
-│   └── flume-conf.properties          ← Real-time log ingestion config
+│   └── flume-conf.properties     ← Apache Flume config (production ingestion)
 │
 ├── phase2_cleaning/
-│   └── clean_logs.pig                 ← ETL/data cleaning script
+│   └── clean_logs.pig            ← Pig ETL: parse, filter, transform logs
 │
 ├── phase3_analysis/
-│   ├── create_table.hql               ← Hive table creation
-│   └── trend_queries.hql              ← 8 analytics queries
+│   ├── create_table.hql          ← Hive external table definition
+│   └── trend_queries.hql         ← 8 analytics queries
 │
-├── docs/
-│   ├── README.md                      ← Additional documentation
-│   └── DOCKER_SETUP.md                ← Detailed Docker reference
-│
-└── logs/                              ← Local log directory (empty template)
+├── logs/                         ← Generated raw logs (created at runtime)
+└── results/                      ← ✅ Query results saved here (created at runtime)
 ```
 
 ---
 
-## 🔄 Data Pipeline Explanation
+## 🚀 Quick Start — Run from Scratch
 
-### Phase 1: Ingestion (Apache Flume) 📥
-- **Purpose**: Collect logs in real-time from web servers
-- **Source**: File directory monitoring (spooling directory)
-- **Destination**: HDFS distributed storage
-- **Config**: `phase1_ingestion/flume-conf.properties`
-- **Why**: Simulates enterprise log aggregation (Netflix, Amazon scale)
+### Prerequisites
 
-### Phase 2: Cleaning & Transformation (Apache Pig) 🧹
-- **Purpose**: Extract, transform, load (ETL) - remove bad data
-- **Input**: 100 raw logs (8,012 bytes)
-- **Processing**:
-  - Parse Apache Common Log Format using regex
-  - Remove HTTP 404/500 errors
-  - Remove static assets (.jpg, .css, .js files)
-  - Extract: IP, timestamp, URL
-- **Output**: 89 clean records (5,809 bytes, 11% filtered)
-- **Script**: `phase2_cleaning/clean_logs.pig`
+- **Docker** installed and running
+- **4 GB RAM** minimum available to Docker
+- **Linux or macOS** (or WSL2 on Windows)
 
-### Phase 3: Analytics (Apache Hive) 📊
-- **Purpose**: SQL-based analysis of clickstream trends
-- **Language**: HiveQL (SQL-like interface to MapReduce)
-- **Queries**: 8 pre-built analysis questions
-- **Results**: Business insights on user behavior
-- **Scripts**: 
-  - `phase3_analysis/create_table.hql` - Schema definition
-  - `phase3_analysis/trend_queries.hql` - Analytics queries
+> **No need to build locally!** The image is pre-built and published on Docker Hub.
+> `./start_docker.sh` pulls it automatically.
+> 🐳 Docker Hub: [hub.docker.com/r/ryukr1/clickstream-pipeline](https://hub.docker.com/r/ryukr1/clickstream-pipeline)
 
 ---
 
-## 📊 Sample Results
+### Step 0 — Fix Docker Permissions (one-time only)
 
-Running all 8 analytics queries produces:
+> Skip this if you can already run `docker ps` without `sudo`.
 
-```
-Query 1: Top 5 Pages by Click Count
-┌─────────────────────────────┬──────────┐
-│ url                         │ clicks   │
-├─────────────────────────────┼──────────┤
-│ GET /checkout HTTP/1.1      │ 20       │
-│ GET /products/laptop HTTP/1.1│ 19      │
-│ GET /cart HTTP/1.1          │ 18       │
-│ GET /products/phone HTTP/1.1│ 17       │
-│ GET /index.html HTTP/1.1    │ 15       │
-└─────────────────────────────┴──────────┘
-
-Query 2: Daily Traffic Trends
-Date: 05/Apr/2026 → Total Clicks: 89
-
-Query 3: Unique Visitors
-Total Unique IPs: 4
-
-Query 4: Traffic by IP (Top Visitors)
-192.168.1.101 → 30 visits
-192.168.1.100 → 27 visits
-192.168.1.102 → 16 visits
-10.0.0.1 → 16 visits
-
-Query 5: URL Pattern Categories
-Product Pages → 36 clicks (40%)
-Checkout → 20 clicks (22%)
-Shopping Cart → 18 clicks (20%)
-Other → 15 clicks (17%)
-```
-
----
-
-## 💼 Technologies Used
-
-| Layer | Technology | Version | Purpose |
-|-------|-----------|---------|---------|
-| **Ingestion** | Apache Flume | 1.x | Real-time log streaming |
-| **Storage** | Hadoop HDFS | 3.3.6 | Distributed file system |
-| **Processing** | Apache Pig | 0.17.0 | Data transformation/ETL |
-| **Analytics** | Apache Hive | 3.1.3 | SQL interface to data |
-| **Compute** | MapReduce | Hadoop 3.3.6 | Distributed computation |
-| **Deployment** | Docker | Latest | Containerization |
-| **OS** | Linux | Ubuntu 20.04 | Container base |
-
----
-
-## 🏗️ Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                 CLICKSTREAM DATA PIPELINE                     │
-└──────────────────────────────────────────────────────────────┘
-
-         Web Server Logs
-               ↓
-    ┌─────────────────────┐
-    │  PHASE 1: INGESTION │
-    │  Apache Flume       │
-    │  (Real-time stream) │
-    └──────────┬──────────┘
-               ↓
-    ┌─────────────────────┐
-    │   HDFS Storage      │
-    │   /raw/access.log   │
-    │   (100 records)     │
-    └──────────┬──────────┘
-               ↓
-    ┌─────────────────────┐
-    │ PHASE 2: CLEANING   │
-    │ Apache Pig (ETL)    │
-    │ MapReduce jobs      │
-    └──────────┬──────────┘
-               ↓
-    ┌─────────────────────┐
-    │   HDFS Storage      │
-    │   /processed/ (CSV) │
-    │   (89 records)      │
-    └──────────┬──────────┘
-               ↓
-    ┌─────────────────────┐
-    │ PHASE 3: ANALYTICS  │
-    │ Apache Hive (SQL)   │
-    │ 8 pre-built queries │
-    └──────────┬──────────┘
-               ↓
-    ┌─────────────────────┐
-    │ Business Insights   │
-    │ • Top pages         │
-    │ • Traffic trends    │
-    │ • Unique visitors   │
-    │ • Bot detection     │
-    └─────────────────────┘
-```
-
----
-
-## 🎓 Learning Outcomes
-
-Working through this project demonstrates:
-
-✅ **Big Data Engineering**
-- Real-time data ingestion architecture
-- Distributed ETL processing
-- Data quality and validation
-
-✅ **Data Processing**
-- Log parsing and regex patterns
-- Complex transformations
-- Handling > 1 billion records (scalable design)
-
-✅ **Data Analytics**
-- SQL-based analysis
-- Answering business questions
-- Trend identification
-
-✅ **DevOps Skills**
-- Docker containerization
-- Distributed systems
-- Service configuration and debugging
-
-✅ **Problem Solving**
-- Debugging distributed systems
-- Handling real-world messy data
-- Performance optimization
-
----
-
-## 📚 Additional Documentation
-
-- **[DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md)** - Step-by-step Docker setup guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system design and data flow diagrams
-- **[INTERVIEW_GUIDE.md](INTERVIEW_GUIDE.md)** - Interview preparation and talking points
-- **[docs/DOCKER_SETUP.md](docs/DOCKER_SETUP.md)** - Complete Docker command reference
-
----
-
-## 🔧 Troubleshooting
-
-### Services Won't Start
 ```bash
-# Check what services are running
-jps
-
-# If any missing, start manually
-/usr/local/hadoop/bin/hdfs namenode &
-/usr/local/hadoop/bin/hdfs datanode &
-/usr/local/hadoop/bin/yarn resourcemanager &
-/usr/local/hadoop/bin/yarn nodemanager &
+sudo usermod -aG docker $USER
 ```
 
-### Hive Connection Fails
+**Then log out and log back in** for the group change to take effect.
+
+---
+
+### Step 1 — Clone and Enter the Project
+
 ```bash
-# Start MetaStore service
+git clone <your-repo-url>
+cd Clickstream_analysis
+```
+
+---
+
+### Step 2 — Build Image & Start Container (host terminal)
+
+```bash
+./start_docker.sh
+```
+
+What this does:
+- Pulls `silicoflare/hadoop:amd` base image (Hadoop + Hive + Pig pre-installed)
+- Builds `clickstream-pipeline:latest` with your custom configs
+- Creates a container named `clickstream` with hostname `namenode`
+- Drops you into a bash shell **inside the container**
+
+> **Apple M1/M2 Mac:** run `./start_docker.sh arm` instead
+>
+> **First time:** downloading the base image takes **2–5 minutes**. Subsequent runs are instant.
+
+Your prompt will change to:
+```
+root@namenode:/clickstream#
+```
+
+---
+
+### Step 3 — Start All Hadoop & Hive Services (inside container)
+
+```bash
+./start_services.sh
+```
+
+This starts all 5 services in order:
+
+```
+Step 1: NameNode format  (skipped if already formatted — data is preserved)
+Step 2: NameNode         (HDFS master — manages file locations)
+Step 3: DataNode         (HDFS worker — stores actual data blocks)
+Step 4: ResourceManager  (YARN — schedules compute jobs)
+Step 5: NodeManager      (YARN worker — runs Pig/MapReduce tasks)
+Step 6: Hive MetaStore   (waits up to 90s until port 9083 is open ✓)
+Step 7: HDFS directories (creates /user/root/clickstream/raw + /processed)
+Step 8: Verify with jps  (shows all running Java processes)
+```
+
+Wait until you see:
+```
+✓ All services started!
+```
+
+---
+
+### Step 4 — Run the Full Pipeline (inside container)
+
+```bash
+./run_pipeline.sh
+```
+
+Pipeline progress:
+
+```
+STEP 1 — Generate Logs     → Creates 100,000 Apache log entries
+STEP 2 — Upload to HDFS    → Puts logs into distributed storage
+STEP 3 — Clean Old Data    → Removes previous Pig output
+STEP 4 — Pig ETL           → Filters 404s & static assets (~3 min)
+STEP 5 — Create Hive Table → Points Hive at the clean HDFS data
+STEP 6 — Run 8 Queries     → Saves results to file
+```
+
+> ⏳ **Step 4 (Pig ETL) takes ~3 minutes** — this is normal. Pig runs a MapReduce job.
+
+---
+
+### Step 5 — View Your Results
+
+Results are saved to a file **visible both inside the container and on your host machine**:
+
+```bash
+# Inside the container:
+cat /clickstream/results/analysis_results.txt
+
+# On your HOST machine (VS Code, terminal, etc.):
+cat ~/Clickstream_analysis/results/analysis_results.txt
+```
+
+---
+
+## 📊 What the Queries Show
+
+The `results/analysis_results.txt` file contains output from 8 queries:
+
+| Query | Question answered |
+|-------|------------------|
+| 1 | Top 5 most clicked pages |
+| 2 | Top 10 most clicked pages |
+| 3 | Daily traffic count by date |
+| 4 | Most popular pages per day |
+| 5 | Total unique visitors (distinct IPs) |
+| 6 | Unique visitors per page |
+| 7 | Top IPs by page visits (bot detection) |
+| 8 | Traffic by category (Products, Cart, Checkout, etc.) |
+
+---
+
+## 🌐 Web UIs
+
+While the container is running, open these in your browser:
+
+| UI | URL | What you can see |
+|----|-----|-----------------|
+| HDFS NameNode | http://localhost:9870 | Files in HDFS, storage usage |
+| YARN ResourceManager | http://localhost:8088 | Pig MapReduce job status |
+| DataNode | http://localhost:9864 | Block-level storage info |
+
+---
+
+## 🔁 Subsequent Runs
+
+When you come back after closing the terminal:
+
+```bash
+# On host — reconnect to existing container (no rebuild)
+./start_docker.sh
+
+# Inside container — restart all services (needed every container restart)
+./start_services.sh
+
+# Re-run the pipeline
+./run_pipeline.sh
+
+# OR re-run only the Hive queries (if Pig data is already in HDFS)
+./run_pipeline.sh --analyze
+```
+
+---
+
+## 🧩 Optional: 3-Node Cluster (Multi-Node)
+
+To run with 1 NameNode + 3 DataNodes (closer to production):
+
+```bash
+# On host machine (no need to enter container)
+./start_multinode.sh up         # Build + start all 4 containers
+./start_multinode.sh status     # Check cluster health
+./start_multinode.sh pipeline   # Run the ETL pipeline
+./start_multinode.sh down       # Stop everything
+```
+
+---
+
+## 🚨 Troubleshooting
+
+### `permission denied while trying to connect to Docker`
+```bash
+sudo usermod -aG docker $USER
+# Then log out and log back in
+```
+
+### `DataNode: Unknown host: namenode`
+The container was started without the correct hostname. Fix:
+```bash
+sudo docker rm -f clickstream
+./start_docker.sh    # recreates with --hostname namenode
+```
+
+### `Hive: Unable to instantiate SessionHiveMetaStoreClient`
+MetaStore isn't running. Inside the container:
+```bash
+# Check if it's running
+nc -zv localhost 9083
+
+# Start it manually if not
 nohup hive --service metastore > /tmp/metastore.log 2>&1 &
+sleep 30
 
-# Use explicit MetaStore URI
-hive -hiveconf hive.metastore.uris=thrift://localhost:9083
+# Then re-run only the analysis steps
+./run_pipeline.sh --analyze
 ```
 
-### Pig Output Directory Error
+### `MetaStore did not start in time`
 ```bash
-# Pig won't overwrite - delete first
-hdfs dfs -rm -r /user/root/clickstream/processed
-# Then re-run Pig script
+cat /tmp/metastore.log    # inside container — check what went wrong
 ```
 
-### View Service Logs
+### Pig output check fails
 ```bash
-# NameNode logs
-tail -f /usr/local/hadoop/logs/hadoop-root-namenode-*.log
-
-# Pig job logs
-tail -f /tmp/pig*.log
-
-# Hive MetaStore logs
-cat /tmp/metastore.log
+# Verify Pig data is in HDFS
+hdfs dfs -ls /user/root/clickstream/processed/
+hdfs dfs -cat /user/root/clickstream/processed/part-*  | head -20
 ```
-
----
-
-## 🌐 Web UI Access
-
-Once services are running, access dashboards:
-
-| Component | URL | Port |
-|-----------|-----|------|
-| **NameNode** | http://localhost:9870 | 9870 |
-| **ResourceManager** | http://localhost:8088 | 8088 |
-| **DataNode** | http://localhost:9864 | 9864 |
-
----
-
-## 💡 Real-World Applications
-
-This pipeline architecture is used by:
-
-- **Amazon**: Track product clicks → Recommend similar items
-- **Netflix**: Analyze viewing patterns → Personalize recommendations
-- **Facebook**: Process billions of events → Ad targeting
-- **Airbnb**: Study search/booking flows → Optimize listings
-- **Spotify**: Analyze listening behavior → Suggest playlists
-
----
-
-## 🚀 Next Steps / Enhancements
-
-- [ ] Use real website clickstream data (Kaggle dataset)
-- [ ] Add real-time Kafka streaming instead of batch Flume
-- [ ] Implement Spark instead of MapReduce for faster processing
-- [ ] Add Hive partitioning for daily data (optimization)
-- [ ] Create dashboard (Grafana/Superset) for visualization
-- [ ] Automate pipeline with Airflow/Oozie scheduler
-- [ ] Add anomaly detection for bot/attack patterns
-
----
-
-## 📋 Requirements
-
-### Environment
-- Docker with `silicoflare/hadoop` image
-- 4GB+ RAM
-- 20GB+ disk space
-- Linux/Mac/WSL environment
-
-### Software (Inside Docker)
-- Hadoop 3.3.6
-- Apache Flume 1.x
-- Apache Pig 0.17.0
-- Apache Hive 3.1.3
-- Java 8+
 
 ---
 
 ## 📖 Data Format
 
-### Input: Apache Common Log Format
+### Input — Apache Common Log Format
 ```
-192.168.1.100 - - [05/Apr/2026:16:31:52 +0000] "GET /products/laptop HTTP/1.1" 200 5234
-IP           USER AUTH [TIMESTAMP]                 METHOD PAGE VERSION         STATUS SIZE
-```
-
-### Output: CSV (Cleaned)
-```
-192.168.1.100,05/Apr/2026:16:31:52 +0000,GET /products/laptop HTTP/1.1
-IP,timestamp,url
+192.168.1.100 - - [06/Apr/2026:10:00:01 +0000] "GET /products/laptop HTTP/1.1" 200 5234
 ```
 
----
+### After Pig ETL — CSV Output
+```
+192.168.1.100,06/Apr/2026:10:00:01 +0000,GET /products/laptop HTTP/1.1
+```
 
-## 🤝 Contributing
-
-Contributions welcome! Areas:
-- Add more analytics queries
-- Improve data generation (more realistic patterns)
-- Add visualization dashboards
-- Performance optimizations
-- Documentation improvements
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
+### After Hive — Query Results
+```
+/products/laptop    14823
+/cart               11204
+/checkout            9876
+...
+```
 
 ---
 
-## 👤 Author
+## 💼 Skills Demonstrated
 
-Created as a portfolio project demonstrating big data engineering skills.
-
-**Skills Demonstrated**: Apache Flume, Pig, Hive, Hadoop, Docker, ETL, Data Analysis, Distributed Systems
-
----
-
-## 📞 Questions?
-
-For detailed walkthroughs:
-- Check [ARCHITECTURE.md](ARCHITECTURE.md) for system design
-- See [INTERVIEW_GUIDE.md](INTERVIEW_GUIDE.md) for deeper explanations
-- Review script comments in phase folders
+- **Apache Pig** — MapReduce-based ETL, log parsing with regex, data filtering
+- **Apache Hive** — HiveQL, external tables, aggregations, window functions
+- **Hadoop HDFS** — Distributed storage, NameNode/DataNode architecture
+- **Apache YARN** — Job scheduling and resource management
+- **Docker** — Custom image build, volume mounts, port mapping, multi-container setup
+- **Bash scripting** — Service orchestration, health checks, automation
 
 ---
 
-## ⭐ If This Helped
+## 🔮 Potential Enhancements
 
-If you found this project helpful for learning big data engineering, consider starring it! ⭐
+- [ ] Replace batch Pig with real-time Apache Kafka + Spark Streaming
+- [ ] Add Grafana dashboard for visual analytics
+- [ ] Partition Hive table by date for faster queries
+- [ ] Add Apache Airflow to schedule daily pipeline runs
+- [ ] Integrate with real web server (Nginx) for live log tailing
+- [ ] Add anomaly detection for bot/DDoS pattern recognition
 
 ---
 
-**Last Updated**: April 2026  
-**Status**: Complete & Production-Ready
-
+**Last Updated:** June 2026 | **Status:** ✅ Working

@@ -17,18 +17,41 @@ CONTAINER_NAME="clickstream"
 PROJECT_DIR="$(pwd)"
 ARCHITECTURE="${1:-amd}"  # Default to amd, can be arm for M1/M2 Mac
 
-# Check which architecture image to use
+# Docker Hub image (pre-built and published)
+DOCKERHUB_IMAGE="ryukr1/clickstream-pipeline:latest"
+LOCAL_IMAGE="clickstream-pipeline:latest"
+
+# Check which architecture base image to use (only needed for local build)
 if [ "$ARCHITECTURE" = "arm" ]; then
-    IMAGE="silicoflare/hadoop:arm"
+    BASE_IMAGE="silicoflare/hadoop:arm"
 else
-    IMAGE="silicoflare/hadoop:amd"
+    BASE_IMAGE="silicoflare/hadoop:amd"
 fi
+IMAGE="$LOCAL_IMAGE"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Starting Clickstream Docker Container${NC}"
 echo -e "${BLUE}Architecture: $ARCHITECTURE${NC}"
-echo -e "${BLUE}Image: $IMAGE${NC}"
+echo -e "${BLUE}Base Image: $BASE_IMAGE${NC}"
+echo -e "${BLUE}Target Image: $IMAGE${NC}"
 echo -e "${BLUE}========================================${NC}\n"
+
+# ── Get the Docker image ───────────────────────────────────────────
+# Try pulling from Docker Hub first (fast).
+# Falls back to building locally if pull fails.
+if docker image inspect "$LOCAL_IMAGE" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Image '$LOCAL_IMAGE' already exists locally — skipping pull${NC}\n"
+else
+    echo -e "${YELLOW}Pulling pre-built image from Docker Hub: $DOCKERHUB_IMAGE${NC}"
+    if docker pull "$DOCKERHUB_IMAGE" 2>/dev/null; then
+        docker tag "$DOCKERHUB_IMAGE" "$LOCAL_IMAGE"
+        echo -e "${GREEN}✓ Pulled and tagged as '$LOCAL_IMAGE'${NC}\n"
+    else
+        echo -e "${YELLOW}Docker Hub pull failed — building locally (this takes ~5 min)...${NC}"
+        docker build --build-arg BASE_IMAGE="$BASE_IMAGE" -t "$LOCAL_IMAGE" .
+        echo -e "${GREEN}✓ Local build complete${NC}\n"
+    fi
+fi
 
 # Check if container already running
 if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -50,6 +73,7 @@ fi
 echo -e "${YELLOW}Creating new Docker container...${NC}"
 
 sudo docker run -d --name "$CONTAINER_NAME" \
+  --hostname namenode \
   -p 9870:9870 \
   -p 8088:8088 \
   -p 9864:9864 \

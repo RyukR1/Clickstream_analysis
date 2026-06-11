@@ -1,0 +1,145 @@
+services:
+  # ─────────────────────────────────────────────────────────────────────
+  # NAMENODE  ──  NameNode + ResourceManager + Hive MetaStore
+  # ─────────────────────────────────────────────────────────────────────
+  namenode:
+    image: clickstream-pipeline:latest
+    container_name: hadoop-namenode
+    hostname: namenode                      # ← critical: HDFS uses this hostname
+    networks:
+      - hadoop-net
+    ports:
+      - "9870:9870"   # NameNode Web UI
+      - "8088:8088"   # ResourceManager Web UI
+      - "9083:9083"   # Hive MetaStore
+      - "9000:9000"   # HDFS IPC
+    volumes:
+      - .:/clickstream
+      # Override hdfs-site.xml with the multi-node version (replication=3)
+      - ./hadoop_config/hdfs-site-multinode.xml:/usr/local/hadoop/etc/hadoop/hdfs-site.xml:ro
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+      - HADOOP_HOME=/usr/local/hadoop
+      - HIVE_HOME=/usr/local/hive
+      - PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/hadoop/bin:/usr/local/hadoop/sbin:/usr/local/hive/bin
+    entrypoint: []
+    command: >
+      /bin/bash -c "
+        echo '==> Formatting NameNode (first-time only)...' &&
+        hdfs namenode -format -force -nonInteractive 2>/dev/null || true &&
+        echo '==> Starting NameNode...' &&
+        hdfs --daemon start namenode &&
+        sleep 5 &&
+        echo '==> Starting ResourceManager...' &&
+        yarn --daemon start resourcemanager &&
+        echo '==> Checking/Initializing Hive Derby schema...' &&
+        cd /clickstream &&
+        if [ ! -d metastore_db ] || ! schematool -dbType derby -info >/dev/null 2>&1; then
+          rm -rf metastore_db && schematool -dbType derby -initSchema;
+        fi &&
+        echo '==> Starting Hive MetaStore...' &&
+        nohup hive --service metastore > /tmp/metastore.log 2>&1 &
+        echo '==> NameNode ready!' &&
+        sleep infinity
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "hdfs dfsadmin -safemode get 2>/dev/null | grep -q 'Safe mode is OFF' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # DATANODE 1
+  # ─────────────────────────────────────────────────────────────────────
+  datanode1:
+    image: clickstream-pipeline:latest
+    container_name: hadoop-datanode1
+    hostname: datanode1
+    networks:
+      - hadoop-net
+    depends_on:
+      namenode:
+        condition: service_healthy
+    ports:
+      - "9864:9864"   # DataNode Web UI
+    volumes:
+      - .:/clickstream
+      - ./hadoop_config/hdfs-site-multinode.xml:/usr/local/hadoop/etc/hadoop/hdfs-site.xml:ro
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    entrypoint: []
+    command: >
+      /bin/bash -c "
+        echo '==> Starting DataNode 1...' &&
+        hdfs --daemon start datanode &&
+        echo '==> Starting NodeManager 1...' &&
+        yarn --daemon start nodemanager &&
+        echo '==> DataNode 1 ready!' &&
+        sleep infinity
+      "
+
+  # ─────────────────────────────────────────────────────────────────────
+  # DATANODE 2
+  # ─────────────────────────────────────────────────────────────────────
+  datanode2:
+    image: clickstream-pipeline:latest
+    container_name: hadoop-datanode2
+    hostname: datanode2
+    networks:
+      - hadoop-net
+    depends_on:
+      namenode:
+        condition: service_healthy
+    ports:
+      - "9865:9864"   # DataNode Web UI (different host port)
+    volumes:
+      - .:/clickstream
+      - ./hadoop_config/hdfs-site-multinode.xml:/usr/local/hadoop/etc/hadoop/hdfs-site.xml:ro
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    entrypoint: []
+    command: >
+      /bin/bash -c "
+        echo '==> Starting DataNode 2...' &&
+        hdfs --daemon start datanode &&
+        echo '==> Starting NodeManager 2...' &&
+        yarn --daemon start nodemanager &&
+        echo '==> DataNode 2 ready!' &&
+        sleep infinity
+      "
+
+  # ─────────────────────────────────────────────────────────────────────
+  # DATANODE 3
+  # ─────────────────────────────────────────────────────────────────────
+  datanode3:
+    image: clickstream-pipeline:latest
+    container_name: hadoop-datanode3
+    hostname: datanode3
+    networks:
+      - hadoop-net
+    depends_on:
+      namenode:
+        condition: service_healthy
+    ports:
+      - "9866:9864"   # DataNode Web UI (different host port)
+    volumes:
+      - .:/clickstream
+      - ./hadoop_config/hdfs-site-multinode.xml:/usr/local/hadoop/etc/hadoop/hdfs-site.xml:ro
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    entrypoint: []
+    command: >
+      /bin/bash -c "
+        echo '==> Starting DataNode 3...' &&
+        hdfs --daemon start datanode &&
+        echo '==> Starting NodeManager 3...' &&
+        yarn --daemon start nodemanager &&
+        echo '==> DataNode 3 ready!' &&
+        sleep infinity
+      "
+
+networks:
+  hadoop-net:
+    driver: bridge

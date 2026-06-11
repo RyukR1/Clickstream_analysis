@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+        <name>dfs.replication</name>
+        <!-- 3 DataNodes in multi-node docker-compose cluster -->
+        <value>3</value>
+    </property>
+
+    <property>
+        <name>dfs.name.dir</name>
+        <value>file:///home/hadoop/hdfs/namenode</value>
+    </property>
+
+    <property>
+        <name>dfs.data.dir</name>
+        <value>file:///home/hadoop/hdfs/datanode</value>
+    </property>
+</configuration>

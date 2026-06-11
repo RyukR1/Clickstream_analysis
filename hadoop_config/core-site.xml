@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+      <name>fs.defaultFS</name>
+      <!-- We point it explicitly to the namenode master host -->
+      <value>hdfs://namenode:9000</value>
+      <description>The default file system URI</description>
+   </property>
+</configuration>

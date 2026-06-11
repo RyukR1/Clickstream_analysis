@@ -6,6 +6,13 @@
 
 set -e  # Exit on error
 
+# Ensure required environment variables and paths are set
+export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-8-openjdk-amd64}
+export HADOOP_HOME=${HADOOP_HOME:-/usr/local/hadoop}
+export PIG_HOME=${PIG_HOME:-/pig}
+export HIVE_HOME=${HIVE_HOME:-/usr/local/hive}
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PIG_HOME/bin:$HIVE_HOME/bin
+
 # Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,6 +23,7 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_DIR="/clickstream"
 LOG_DIR="$PROJECT_DIR/logs"
+RESULTS_DIR="$PROJECT_DIR/results"
 HDFS_RAW="/user/root/clickstream/raw"
 HDFS_PROCESSED="/user/root/clickstream/processed"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
@@ -73,14 +81,16 @@ main() {
 
 # Step 1: Generate sample logs
 generate_logs() {
-    print_info "Generating 100 sample log entries..."
+    print_info "Generating 100,000 sample log entries..."
+    
+    mkdir -p "$LOG_DIR"
     
     python3 << 'PYTHON_EOF'
 import random
 from datetime import datetime, timedelta
 
 # Configuration
-NUM_LOGS = 100
+NUM_LOGS = 100000
 OUTPUT_FILE = '/clickstream/logs/access.log'
 
 # Realistic website pages and IPs
@@ -192,11 +202,11 @@ run_pig_etl() {
     print_info "Running Pig ETL script..."
     
     if [ -f "$PROJECT_DIR/phase2_cleaning/clean_logs.pig" ]; then
-        pig -x local "$PROJECT_DIR/phase2_cleaning/clean_logs.pig" 2>&1 | tail -20
+        pig "$PROJECT_DIR/phase2_cleaning/clean_logs.pig" 2>&1 | tail -20
         
-        if hdfs dfs -test -f "$HDFS_PROCESSED/part-m-00000"; then
+        if hdfs dfs -test -e "$HDFS_PROCESSED/"; then
             print_success "Pig ETL completed"
-            local record_count=$(hdfs dfs -cat "$HDFS_PROCESSED/part-m-00000" 2>/dev/null | wc -l)
+            local record_count=$(hdfs dfs -cat "$HDFS_PROCESSED/part-*" 2>/dev/null | wc -l)
             echo "  Records in output: $record_count"
         else
             print_error "Pig ETL failed - no output found"
@@ -211,6 +221,27 @@ run_pig_etl() {
 # Step 5: Create Hive table
 create_hive_table() {
     print_info "Creating Hive table schema..."
+
+    # Wait for Hive MetaStore to be ready before creating table
+    print_info "Checking Hive MetaStore on port 9083..."
+    TIMEOUT=60
+    ELAPSED=0
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+        if bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9083' 2>/dev/null; then
+            print_success "MetaStore is reachable"
+            break
+        fi
+        printf "."
+        sleep 3
+        ELAPSED=$((ELAPSED + 3))
+    done
+    echo ""
+
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+        print_error "Hive MetaStore not reachable on port 9083 after ${TIMEOUT}s."
+        print_error "Start it first: nohup hive --service metastore > /tmp/metastore.log 2>&1 &"
+        return 1
+    fi
     
     if [ -f "$PROJECT_DIR/phase3_analysis/create_table.hql" ]; then
         hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
@@ -226,12 +257,29 @@ create_hive_table() {
 # Step 6: Run Hive analytics queries
 run_hive_queries() {
     print_info "Running 8 analytics queries..."
+
+    mkdir -p "$RESULTS_DIR"
+    RESULTS_FILE="$RESULTS_DIR/analysis_results.txt"
+
+    {
+        echo "===================================================="
+        echo "  CLICKSTREAM ANALYSIS RESULTS"
+        echo "  Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "===================================================="
+        echo ""
+    } > "$RESULTS_FILE"
     
     if [ -f "$PROJECT_DIR/phase3_analysis/trend_queries.hql" ]; then
-        hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
-             -f "$PROJECT_DIR/phase3_analysis/trend_queries.hql" 2>&1
+        hive -S \
+             -hiveconf hive.metastore.uris=thrift://localhost:9083 \
+             -f "$PROJECT_DIR/phase3_analysis/trend_queries.hql" \
+             2>/dev/null | tee -a "$RESULTS_FILE"
         
-        print_success "Analytics queries completed, results displayed above"
+        print_success "Analytics queries completed!"
+        print_success "Results saved to: $RESULTS_FILE"
+        echo ""
+        echo -e "${YELLOW}  View results anytime with:${NC}"
+        echo "    cat $RESULTS_FILE"
     else
         print_error "Trend queries script not found"
         return 1

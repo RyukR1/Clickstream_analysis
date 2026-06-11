@@ -37,3 +37,4 @@ hadoop_tmp/
 # Local test files
 test_output/
 *.tmp
+results/
