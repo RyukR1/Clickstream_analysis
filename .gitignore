@@ -42,6 +42,7 @@ results/
 # Pipeline output
 data/
 .venv/
+.airflow/
 *.egg-info/
 .ruff_cache/
 .pytest_cache/

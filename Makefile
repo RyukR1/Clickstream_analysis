@@ -11,7 +11,9 @@ DAYS ?= 7
 DATA ?= data
 export PYTHONPATH := src
 
-.PHONY: setup generate etl quality report demo test lint benchmark benckmark clean
+DATE ?= 2026-04-06
+
+.PHONY: setup generate etl quality report demo test lint benchmark benckmark airflow-init airflow-test airflow-standalone clean
 
 setup:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -44,6 +46,15 @@ benchmark:
 	$(PYTHON) -m clickstream.benchmark --rows $(ROWS) --out docs/benchmark.md
 
 benckmark: benchmark
+
+airflow-init:
+	AIRFLOW_HOME=$(CURDIR)/.airflow $(PYTHON) -m airflow db migrate
+
+airflow-test:
+	AIRFLOW_HOME=$(CURDIR)/.airflow $(PYTHON) -m airflow dags test clickstream_daily $(DATE) --dagfile-path dags/clickstream_daily.py
+
+airflow-standalone:
+	AIRFLOW_HOME=$(CURDIR)/.airflow PATH="$(CURDIR)/.venv/bin:$(PATH)" airflow standalone
 
 clean:
 	rm -rf $(DATA) results .pytest_cache
