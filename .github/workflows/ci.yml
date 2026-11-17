@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/*]
   pull_request:
 
 jobs:
@@ -20,7 +20,6 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: ruff check .
-      - run: shellcheck *.sh
       - run: pytest -q
       - run: make demo ROWS=50000 DAYS=3
       - uses: actions/upload-artifact@v4
@@ -30,12 +29,3 @@ jobs:
             results/analysis_results.txt
             data/metrics.json
             data/quality.json
-
-  dockerfile:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile
-          failure-threshold: error

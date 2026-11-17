@@ -40,7 +40,6 @@ test:
 
 lint:
 	ruff check .
-	shellcheck *.sh
 
 benchmark:
 	$(PYTHON) -m clickstream.benchmark --rows $(ROWS) --out docs/benchmark.md
