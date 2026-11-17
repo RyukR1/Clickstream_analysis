@@ -11,6 +11,8 @@ dependencies = ["pyspark>=3.5", "pyarrow>=14"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.5"]
+airflow = ["apache-airflow>=2.8"]
+all = ["pytest>=8.0", "ruff>=0.5", "apache-airflow>=2.8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
