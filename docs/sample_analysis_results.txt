@@ -1,0 +1,110 @@
+Clickstream analysis results (2026-11-17 04:39:28 UTC)
+
+== top_pages ==
+url               clicks  unique_visitors
+/index.html       25868   4965           
+/products/laptop  20488   4921           
+/products/phone   18806   4881           
+/cart             13265   4617           
+/products/tablet  11750   4485           
+/search           10352   4319           
+/checkout         7372    3778           
+/account          6121    3419           
+/support          4694    2834           
+/payment          4638    2858           
+
+== daily_traffic ==
+event_date  clicks  unique_visitors
+2026-04-06  19211   4895           
+2026-04-07  19193   4875           
+2026-04-08  19304   4892           
+2026-04-09  19242   4876           
+2026-04-10  19351   4885           
+2026-04-11  19038   4860           
+2026-04-12  19231   4887           
+
+== top_pages_per_day ==
+event_date  url               clicks  page_rank
+2026-04-06  /index.html       3681    1        
+2026-04-06  /products/laptop  2921    2        
+2026-04-06  /products/phone   2738    3        
+2026-04-07  /index.html       3668    1        
+2026-04-07  /products/laptop  2885    2        
+2026-04-07  /products/phone   2696    3        
+2026-04-08  /index.html       3728    1        
+2026-04-08  /products/laptop  2958    2        
+2026-04-08  /products/phone   2653    3        
+2026-04-09  /index.html       3699    1        
+2026-04-09  /products/laptop  2879    2        
+2026-04-09  /products/phone   2702    3        
+2026-04-10  /index.html       3767    1        
+2026-04-10  /products/laptop  2981    2        
+2026-04-10  /products/phone   2675    3        
+2026-04-11  /index.html       3651    1        
+2026-04-11  /products/laptop  2893    2        
+2026-04-11  /products/phone   2720    3        
+2026-04-12  /index.html       3674    1        
+2026-04-12  /products/laptop  2971    2        
+2026-04-12  /products/phone   2622    3        
+
+== hourly_pattern ==
+hour_of_day  clicks
+0            973   
+1            929   
+2            987   
+3            1040  
+4            934   
+5            1958  
+6            2974  
+7            4823  
+8            6641  
+9            7559  
+10           8778  
+11           8798  
+12           8706  
+13           8819  
+14           7727  
+15           7798  
+16           7766  
+17           8766  
+18           9694  
+19           9616  
+20           8585  
+21           5895  
+22           2929  
+23           1875  
+
+== traffic_by_section ==
+section             clicks
+products            51044 
+index.html          25868 
+cart                13265 
+search              10352 
+checkout            7372  
+account             6121  
+support             4694  
+payment             4638  
+blog                4570  
+order-confirmation  3398  
+about               3248  
+
+== bot_candidates ==
+ip              requests  distinct_pages
+198.51.100.99   1211      13            
+203.0.113.7     1200      13            
+203.0.113.8     1167      13            
+198.51.100.23   1164      13            
+192.0.2.44      1136      13            
+82.230.185.22   47        12            
+192.27.121.116  46        11            
+172.176.9.143   44        12            
+10.155.133.16   44        12            
+52.43.98.245    43        11            
+
+== purchase_funnel ==
+stage               clicks  pct_of_product_views
+products            51044   100.0               
+cart                13265   26.0                
+checkout            7372    14.4                
+payment             4638    9.1                 
+order-confirmation  3398    6.7                 

@@ -28,7 +28,7 @@ LIMIT 10;
 SELECT visit_date, COUNT(*) as daily_clicks
 FROM clickstream
 GROUP BY visit_date
-ORDER BY visit_date DESC;
+ORDER BY unix_timestamp(visit_date, 'dd/MMM/yyyy') DESC;
 
 -- ============================================================
 -- Query 4: Top Pages by Date (Time-Series)
@@ -37,7 +37,7 @@ ORDER BY visit_date DESC;
 SELECT visit_date, url, COUNT(*) as daily_page_count
 FROM clickstream
 GROUP BY visit_date, url
-ORDER BY visit_date DESC, daily_page_count DESC;
+ORDER BY unix_timestamp(visit_date, 'dd/MMM/yyyy') DESC, daily_page_count DESC;
 
 -- ============================================================
 -- Query 5: Unique IPs (Visitor Count)

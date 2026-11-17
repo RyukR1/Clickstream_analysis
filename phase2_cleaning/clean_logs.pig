@@ -1,6 +1,6 @@
 -- Pig Script: clean_logs.pig
 -- Purpose: Clean raw Apache/Nginx clickstream logs from HDFS
--- Removes failed requests (404s, 500s) and static assets (.jpg, .gif, .css, .js, .png)
+-- Removes non-200 requests and static assets (.jpg, .gif, .css, .js, .png, .ico, .svg)
 -- 
 -- Note: Before running this script, delete the processed directory:
 --   hdfs dfs -rm -r hdfs://localhost:9000/user/root/clickstream/processed
@@ -21,21 +21,13 @@ raw_logs = FOREACH raw_data GENERATE
     (int)REGEX_EXTRACT(line, '(\\d+)\\s+(\\d+)$', 2) as size;
 
 -- Filter out failed requests (status != 200) and static assets
-cleaned_logs = FILTER raw_logs BY 
-    status == 200 
-    AND NOT (request MATCHES '.*\\.jpg.*')
-    AND NOT (request MATCHES '.*\\.gif.*')
-    AND NOT (request MATCHES '.*\\.css.*')
-    AND NOT (request MATCHES '.*\\.js.*')
-    AND NOT (request MATCHES '.*\\.png.*')
-    AND NOT (request MATCHES '.*\\.ico.*')
-    AND NOT (request MATCHES '.*favicon.*');
+cleaned_logs = FILTER raw_logs BY
+    status == 200
+    AND NOT (request MATCHES '.*\\.(jpg|jpeg|gif|css|js|png|ico|svg)[ ?].*');
 
--- Keep ip, timestamp, and request fields needed for trend analysis
--- Note: timestamp format is DD/Mon/YYYY:HH:MM:SS +0000 (date is first 10 chars)
-final_data = FOREACH cleaned_logs GENERATE 
+final_data = FOREACH cleaned_logs GENERATE
     ip as ip,
-    timestamp as visit_date,
+    SUBSTRING(timestamp, 0, 11) as visit_date,
     request as url;
 
 -- Store processed data back to HDFS as CSV for Hive consumption

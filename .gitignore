@@ -38,3 +38,10 @@ hadoop_tmp/
 test_output/
 *.tmp
 results/
+
+# Pipeline output
+data/
+.venv/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/

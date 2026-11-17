@@ -5,7 +5,7 @@ FROM ${BASE_IMAGE}
 # Set the working directory inside the container
 WORKDIR /clickstream
 
-# Copy custom configurations pointing to the multi-node architecture
+# Copy single-node Hadoop configs (multi-node overrides are mounted by docker-compose)
 COPY hadoop_config/core-site.xml /usr/local/hadoop/etc/hadoop/core-site.xml
 COPY hadoop_config/hdfs-site.xml /usr/local/hadoop/etc/hadoop/hdfs-site.xml
 COPY hadoop_config/yarn-site.xml /usr/local/hadoop/etc/hadoop/yarn-site.xml

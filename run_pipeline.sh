@@ -4,7 +4,7 @@
 # This script generates data and runs the entire pipeline automatically
 # Usage: ./run_pipeline.sh
 
-set -e  # Exit on error
+set -euo pipefail
 
 # Ensure required environment variables and paths are set
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-8-openjdk-amd64}
@@ -85,78 +85,8 @@ generate_logs() {
     
     mkdir -p "$LOG_DIR"
     
-    python3 << 'PYTHON_EOF'
-import random
-from datetime import datetime, timedelta
-
-# Configuration
-NUM_LOGS = 100000
-OUTPUT_FILE = '/clickstream/logs/access.log'
-
-# Realistic website pages and IPs
-PAGES = [
-    '/index.html',
-    '/products/laptop',
-    '/products/phone',
-    '/products/tablet',
-    '/cart',
-    '/checkout',
-    '/payment',
-    '/order-confirmation',
-    '/account',
-    '/support',
-    '/about',
-    '/blog'
-]
-
-STATIC_ASSETS = [
-    '/css/style.css',
-    '/js/app.js',
-    '/images/logo.png',
-    '/images/banner.jpg',
-    '/images/product1.jpg',
-    '/images/product2.jpg'
-]
-
-IPS = [
-    '192.168.1.100',
-    '192.168.1.101',
-    '192.168.1.102',
-    '10.0.0.1',
-    '172.16.0.50'
-]
-
-# Generate logs in Apache Common Log Format
-with open(OUTPUT_FILE, 'w') as f:
-    current_time = datetime(2026, 4, 6, 10, 0, 0)
-    
-    for i in range(NUM_LOGS):
-        # 70% pages, 20% static assets, 10% 404 errors
-        rand = random.random()
-        
-        if rand < 0.7:  # Real pages - 200 OK
-            page = random.choice(PAGES)
-            status = 200
-        elif rand < 0.9:  # Static assets - 200 OK
-            page = random.choice(STATIC_ASSETS)
-            status = 200
-        else:  # 404 errors
-            page = '/admin/login.php'
-            status = 404
-        
-        ip = random.choice(IPS)
-        size = random.randint(1000, 50000)
-        timestamp = current_time.strftime('%d/%b/%Y:%H:%M:%S +0000')
-        
-        # Apache Common Log Format
-        log_entry = f'{ip} - - [{timestamp}] "GET {page} HTTP/1.1" {status} {size}\n'
-        f.write(log_entry)
-        
-        # Increment time by 1-10 seconds
-        current_time += timedelta(seconds=random.randint(1, 10))
-
-print(f"Generated {NUM_LOGS} sample logs")
-PYTHON_EOF
+    PYTHONPATH="$PROJECT_DIR/src" python3 -m clickstream.generate \
+        --out "$LOG_DIR/access.log" --rows 100000 --days 7
     
     if [ -f "$LOG_DIR/access.log" ]; then
         print_success "Logs generated: $LOG_DIR/access.log"
@@ -172,10 +102,10 @@ upload_to_hdfs() {
     print_info "Uploading logs to HDFS..."
     
     # Create HDFS directory if not exists
-    hdfs dfs -mkdir -p "$HDFS_RAW" 2>/dev/null || true
+    hdfs dfs -mkdir -p "$HDFS_RAW"
     
     # Upload log file
-    hdfs dfs -put -f "$LOG_DIR/access.log" "$HDFS_RAW/" 2>/dev/null || true
+    hdfs dfs -put -f "$LOG_DIR/access.log" "$HDFS_RAW/"
     
     # Verify upload
     if hdfs dfs -test -f "$HDFS_RAW/access.log"; then
@@ -206,7 +136,8 @@ run_pig_etl() {
         
         if hdfs dfs -test -e "$HDFS_PROCESSED/"; then
             print_success "Pig ETL completed"
-            local record_count=$(hdfs dfs -cat "$HDFS_PROCESSED/part-*" 2>/dev/null | wc -l)
+            local record_count
+            record_count=$(hdfs dfs -cat "$HDFS_PROCESSED/part-*" 2>/dev/null | wc -l)
             echo "  Records in output: $record_count"
         else
             print_error "Pig ETL failed - no output found"
@@ -244,9 +175,13 @@ create_hive_table() {
     fi
     
     if [ -f "$PROJECT_DIR/phase3_analysis/create_table.hql" ]; then
-        hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
-             -f "$PROJECT_DIR/phase3_analysis/create_table.hql" 2>&1 | grep -E "OK|ERROR|Exception" || true
-        
+        mkdir -p "$RESULTS_DIR"
+        if ! hive -hiveconf hive.metastore.uris=thrift://localhost:9083 \
+             -f "$PROJECT_DIR/phase3_analysis/create_table.hql" > "$RESULTS_DIR/hive_create.log" 2>&1; then
+            print_error "Hive table creation failed, see $RESULTS_DIR/hive_create.log"
+            return 1
+        fi
+
         print_success "Hive table created"
     else
         print_error "Hive table creation script not found"
@@ -287,7 +222,7 @@ run_hive_queries() {
 }
 
 # Run main pipeline
-if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+if [ "${1:-}" == "--help" ] || [ "${1:-}" == "-h" ]; then
     echo "Usage: ./run_pipeline.sh [options]"
     echo ""
     echo "Options:"
@@ -302,7 +237,7 @@ if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
 fi
 
 # Handle specific steps
-case "$1" in
+case "${1:-}" in
     --generate)
         print_header "GENERATING LOGS ONLY"
         generate_logs

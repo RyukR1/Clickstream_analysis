@@ -15,7 +15,6 @@ NC='\033[0m'
 ARCHITECTURE="${ARCH:-amd}"
 BASE_IMAGE="silicoflare/hadoop:${ARCHITECTURE}"
 IMAGE="clickstream-pipeline:latest"
-PROJECT_DIR="$(pwd)"
 
 banner() {
     echo -e "${BLUE}"
