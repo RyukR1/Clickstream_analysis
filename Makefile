@@ -34,7 +34,7 @@ report:
 	$(PYTHON) -m clickstream.report --curated $(DATA)/curated --sql sql/analytics.sql \
 		--out results/analysis_results.txt
 
-demo: generate etl quality report
+demo: clean generate etl quality report
 
 test:
 	$(PYTHON) -m pytest -q
