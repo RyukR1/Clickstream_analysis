@@ -6,6 +6,7 @@ export PATH := $(JAVA_HOME)/bin:$(PATH)
 endif
 
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+RUFF ?= $(if $(wildcard .venv/bin/ruff),.venv/bin/ruff,ruff)
 ROWS ?= 200000
 DAYS ?= 7
 DATA ?= data
@@ -39,7 +40,7 @@ test:
 	$(PYTHON) -m pytest -q
 
 lint:
-	ruff check .
+	$(RUFF) check .
 
 benchmark:
 	$(PYTHON) -m clickstream.benchmark --rows $(ROWS) --out docs/benchmark.md
